@@ -1,0 +1,426 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Payroll Wedge Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column; control strip, ranking + chart side by side on wide screens, detail table, assumptions. */
+:root {
+  --bg: #f5f7f9;
+  --surface: #ffffff;
+  --fg: #16202b;
+  --muted: #5b6876;
+  --line: #dbe2e9;
+  --accent: #1d5fd1;
+  --accent-soft: #e3ecfb;
+  --track: #e9eef3;
+  --cmix: 100%; --cmix-with: #000000;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151c; --surface: #161e27; --fg: #e6ecf2; --muted: #93a1b0; --line: #26313d;
+    --accent: #6ea0ff; --accent-soft: #1b2a44; --track: #222c38;
+    --cmix: 62%; --cmix-with: #ffffff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151c; --surface: #161e27; --fg: #e6ecf2; --muted: #93a1b0; --line: #26313d;
+  --accent: #6ea0ff; --accent-soft: #1b2a44; --track: #222c38;
+  --cmix: 62%; --cmix-with: #ffffff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.5;
+}
+.wrap {
+  max-width: 1180px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+  display: grid; gap: 22px;
+}
+header h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; margin: 0 0 6px; text-wrap: balance; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--muted); max-width: 70ch; }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; }
+h2 { font-family: var(--f-display); font-weight: 500; font-size: 19px; margin: 0 0 4px; }
+.sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+.label { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+
+/* control strip */
+.controls { display: grid; grid-template-columns: 1fr auto; gap: 18px 28px; align-items: center; }
+.mult { display: flex; align-items: baseline; gap: 10px; }
+.mult output { font-family: var(--f-display); font-weight: 700; font-size: 44px; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+.mult span { color: var(--muted); }
+.slider-row { grid-column: 1 / -1; display: grid; gap: 6px; }
+input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
+.ticks { position: relative; height: 16px; margin: 0 8px; font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); }
+.ticks span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; padding: 7px 12px; border: 0; background: transparent; color: var(--fg); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.seg button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.right { display: grid; gap: 6px; justify-items: end; }
+
+.grid2 { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 22px; }
+@media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } .controls { grid-template-columns: 1fr; } .right { justify-items: start; } }
+
+/* ranking */
+ol.rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+ol.rank li { display: grid; grid-template-columns: 22px 124px minmax(0, 1fr) 62px; align-items: center; gap: 10px; }
+.pos { font-family: var(--f-mono); color: var(--muted); font-size: 13px; }
+.cname { font-weight: 600; white-space: nowrap; }
+.cname small { display: block; font-weight: 400; color: var(--muted); font-size: 11.5px; }
+.bar { height: 14px; background: var(--track); border-radius: 3px; position: relative; overflow: hidden; }
+.bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; transition: width .25s ease; }
+.pct { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; font-weight: 500; }
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+
+/* chart */
+.chart-box { width: 100%; overflow-x: auto; }
+svg text { fill: var(--muted); font-family: var(--f-mono); font-size: 11px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 13px; }
+.legend button { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; color: var(--fg); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; cursor: pointer; }
+.legend button:hover, .legend button[aria-pressed="true"] { border-color: var(--line); }
+.legend button:focus-visible, ol.rank li:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dim { opacity: .4; }
+ol.rank li { cursor: pointer; border-radius: 4px; }
+.legend b { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+
+/* table */
+.table-box { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 14px; }
+th, td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+th:first-child, td:first-child { text-align: left; }
+td.num small { display: block; color: var(--muted); font-size: 11.5px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
+.split { display: flex; height: 8px; border-radius: 2px; overflow: hidden; min-width: 120px; margin-top: 4px; }
+.split .n { background: var(--accent); } .split .e { background: var(--muted); opacity: .55; } .split .t { background: var(--muted); opacity: .3; }
+.keyline { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+.keyline i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+/* assumptions */
+details summary { cursor: pointer; font-family: var(--f-display); font-size: 19px; }
+.atable input { width: 120px; font: inherit; font-family: var(--f-mono); padding: 5px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); text-align: right; }
+.atable td { white-space: normal; }
+.atable td.note { text-align: left; color: var(--muted); font-size: 13px; min-width: 260px; }
+.foot { color: var(--muted); font-size: 12.5px; max-width: 90ch; }
+.error { color: var(--c-UK); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Payroll Wedge Explorer</h1>
+    <p>Pick a salary as a multiple of each country's annual minimum wage. For each country the page computes the average monthly net pay and the share of the employer's total cost (gross pay plus employer contributions) that reaches the employee. Tax year 2026; employee is married, spouse has own income, no children.</p>
+  </header>
+
+  <section class="panel controls" aria-label="Salary level">
+    <div>
+      <div class="label">Gross salary = minimum wage ×</div>
+      <div class="mult"><output id="multOut" class="num">2.0</output><span>× annual minimum wage</span></div>
+    </div>
+    <div class="right">
+      <div class="label">Show amounts in</div>
+      <div class="seg" role="group" aria-label="Currency">
+        <button id="curLocal" type="button" aria-pressed="false">Local currency</button>
+        <button id="curEur" type="button" aria-pressed="true">EUR</button>
+      </div>
+    </div>
+    <div class="slider-row">
+      <input id="mult" type="range" min="1" max="10" step="0.1" value="2" aria-label="Minimum wage multiplier">
+      <div class="ticks"><span style="left:0%">1×</span><span style="left:11.11%">2×</span><span style="left:33.33%">4×</span><span style="left:55.56%">6×</span><span style="left:77.78%">8×</span><span style="left:100%">10×</span></div>
+    </div>
+  </section>
+
+  <div class="grid2">
+    <section class="panel">
+      <h2>Ranking: net pay as % of employer cost</h2>
+      <p class="sub" id="rankSub">Higher means less of the employer's spend goes to taxes and contributions.</p>
+      <ol class="rank" id="rank"></ol>
+    </section>
+    <section class="panel">
+      <h2>How the share changes with salary level</h2>
+      <p class="sub">Net ÷ employer cost across the full slider range. The vertical line marks the current multiplier. Click a country to highlight it.</p>
+      <div class="chart-box"><svg id="chart" viewBox="0 0 620 340" width="100%" role="img" aria-label="Net to employer cost ratio by multiplier"></svg></div>
+      <div class="legend" id="legend"></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>Monthly figures by country</h2>
+    <p class="sub">Monthly averages are annual amounts ÷ 12 (Spain, Portugal, Greece and Austria pay 14 instalments and Italy 13, so actual payslips are smaller). Romania, Hungary, the Baltic states, Croatia, Bulgaria, Czechia and Slovakia are computed on monthly payroll rules.</p>
+    <div class="table-box">
+      <table>
+        <thead><tr>
+          <th>Country</th><th>Gross / month</th><th>Employer contrib.</th><th>Employer cost / month</th><th>Employee contrib.</th><th>Income tax</th><th>Net / month</th><th>Net ÷ cost</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="keyline"><span><i style="background:var(--accent)"></i>Net pay</span><span><i style="background:var(--muted);opacity:.3"></i>Income tax</span><span><i style="background:var(--muted);opacity:.55"></i>Social contributions (employee + employer)</span></div>
+  </section>
+
+  <section class="panel">
+    <details>
+      <summary>Minimum wages and exchange rates used</summary>
+      <p class="sub" style="margin-top:10px">Edit any value to recompute. Values come from the JSON. Italy, Sweden, Austria and Denmark have no statutory minimum wage, so a collective-agreement entry rate is used as the reference.</p>
+      <div class="table-box">
+        <table class="atable">
+          <thead><tr><th>Country</th><th>Annual minimum (local)</th><th>1 EUR =</th><th>Basis</th></tr></thead>
+          <tbody id="atbody"></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <p class="foot" id="foot">Rules come from salary_rules_2026.json. Each country uses its capital city (UK: England). Germany assumes tax class IV with no church tax, France a cadre. Youth reliefs are not applied. Simplified model: no meal vouchers, voluntary or sector pension schemes or company-specific accident rates, and no official rounding. Exchange rates: ECB reference rates, 20 Oct 2026. Not payroll or tax advice.</p>
+</div>
+
+<script>
+(function () {
+  const SHORT = { RO: "Romania", ES: "Spain", IT: "Italy", FR: "France", DE: "Germany", UK: "United Kingdom", SE: "Sweden",
+    NL: "Netherlands", BE: "Belgium", PT: "Portugal", GR: "Greece", HU: "Hungary", PL: "Poland",
+    EE: "Estonia", LV: "Latvia", LT: "Lithuania", HR: "Croatia",
+    AT: "Austria", BG: "Bulgaria", CY: "Cyprus", CZ: "Czechia", DK: "Denmark", IE: "Ireland", MT: "Malta", SK: "Slovakia", SI: "Slovenia" };
+  const BASE = { RO: "#1d5fd1", ES: "#d9480f", IT: "#2b8a3e", FR: "#7048e8", DE: "#495057", UK: "#c2255c", SE: "#e8a100",
+    NL: "#0b7285", BE: "#862e9c", PT: "#5c940d", GR: "#15aabf", HU: "#a61e4d", PL: "#e03131",
+    EE: "#3b5bdb", LV: "#9c6644", LT: "#74b816", HR: "#f06595",
+    AT: "#c92a2a", BG: "#2f9e44", CY: "#f59f00", CZ: "#364fc7", DK: "#e64980", IE: "#087f5b", MT: "#8f5b00", SK: "#1971c2", SI: "#37b24d" };
+  let ORDER = [], META = {}, CUR = {};
+  let rules = null, mult = 2, useEur = true, focus = null;
+
+  // ---------- evaluator (mirrors calculation_algorithm in the JSON) ----------
+  function fnEval(fn, env) {
+    const x = env[fn.input];
+    let y = 0;
+    for (const s of fn.segments) {
+      const lo = s.from == null ? -Infinity : s.from;
+      const hi = s.to == null ? Infinity : s.to;
+      if (x >= lo && x < hi) {
+        let t = (x - (s.offset || 0)) / (s.scale || 1);
+        if (s.round === "floor") t = Math.floor(t + 1e-9);
+        else if (s.round === "ceil") t = Math.ceil(t - 1e-9);
+        y = (s.c0 || 0) + (s.c1 || 0) * t + (s.c2 || 0) * t * t;
+        break;
+      }
+    }
+    if (fn.min != null) y = Math.max(fn.min, y);
+    if (fn.max != null) y = Math.min(fn.max, y);
+    return y;
+  }
+  function contrib(c, gross) {
+    let base = gross * (c.base_factor == null ? 1 : c.base_factor);
+    if (c.minimum_base != null && base < c.minimum_base) base = c.minimum_base;
+    const hi = c.band_to == null ? Infinity : c.band_to;
+    const lo = c.band_from || 0;
+    return c.rate * Math.max(0, Math.min(base, hi) - lo);
+  }
+  function bracketsTax(br, x) {
+    let t = 0;
+    for (const b of br) {
+      const hi = b.to == null ? Infinity : b.to;
+      if (x > b.from) t += b.rate * (Math.min(x, hi) - b.from);
+    }
+    return t;
+  }
+  function compute(c, gross) {
+    const env = { gross };
+    let er = 0, red = 0, ee = 0, taxTotal = 0, add = 0;
+    for (const k of c.employer_contributions || []) { const v = contrib(k, gross); env["contrib:" + k.id] = v; er += v; }
+    for (const r of c.employer_reductions || []) { const v = fnEval(r.function, env); env["reduction:" + r.id] = v; red += v; }
+    env.employer_cost = gross + er - red;
+    for (const k of c.employee_contributions || []) { const v = contrib(k, gross); env["contrib:" + k.id] = v; ee += v; }
+    env.employee_contributions_total = ee;
+    const ti = c.taxable_income;
+    let base = gross * (ti.gross_factor == null ? 1 : ti.gross_factor);
+    for (const id of ti.subtract_employee_contributions || []) base -= env["contrib:" + id];
+    env.taxable_base = base;
+    let ded = 0;
+    for (const d of ti.deductions || []) { const v = fnEval(d.function, env); env["deduction:" + d.id] = v; ded += v; }
+    env.taxable_income = Math.max(0, base - ded);
+    for (const t of c.income_taxes || []) {
+      const parts = t.parts || 1;
+      const x = env[t.input || "taxable_income"];
+      let g;
+      if (t.brackets) g = parts * bracketsTax(t.brackets, x / parts);
+      else { env.__x = x; g = fnEval(Object.assign({}, t.function, { input: "__x" }), env); }
+      env["tax_gross:" + t.id] = g;
+      let cr = 0;
+      for (const k of t.credits || []) cr += fnEval(k.function, env);
+      let v = g - cr;
+      if (!t.refundable_credits) v = Math.max(0, v);
+      env["tax:" + t.id] = v;
+      taxTotal += v;
+    }
+    for (const a of c.net_additions || []) add += fnEval(a.function, env);
+    return { gross, employerContrib: er - red, cost: env.employer_cost, employeeContrib: ee, tax: taxTotal - add, net: gross - ee - taxTotal + add };
+  }
+  // monthly result for a country at a multiplier
+  function monthly(code, m) {
+    const c = rules.countries[code];
+    const annualGross = m * META[code].min;
+    if (c.period === "month") return compute(c, annualGross / 12);
+    const r = compute(c, annualGross);
+    const out = {};
+    for (const k in r) out[k] = r[k] / 12;
+    return out;
+  }
+
+  // ---------- formatting ----------
+  function money(code, v) {
+    const cur = useEur ? "EUR" : CUR[code];
+    const val = useEur ? v / META[code].fx : v;
+    return new Intl.NumberFormat("en-GB", { style: "currency", currency: cur, maximumFractionDigits: 0 }).format(val);
+  }
+  const pct = v => (v * 100).toFixed(1) + "%";
+  const color = code => `color-mix(in srgb, ${BASE[code] || "#868e96"} var(--cmix), var(--cmix-with))`;
+  const name = code => SHORT[code] || rules.countries[code].name;
+
+  // ---------- render ----------
+  function render() {
+    document.getElementById("multOut").textContent = mult.toFixed(1);
+    const rows = ORDER.map(code => {
+      const r = monthly(code, mult);
+      return { code, r, share: r.cost > 0 ? r.net / r.cost : 0 };
+    });
+
+    // ranking
+    const ranked = rows.slice().sort((a, b) => b.share - a.share);
+    const max = Math.max(...ranked.map(x => x.share), 0.01);
+    document.getElementById("rank").innerHTML = ranked.map((x, i) => `
+      <li data-code="${x.code}" class="${focus && focus !== x.code ? "dim" : ""}" tabindex="0" title="Highlight ${name(x.code)} in the chart">
+        <span class="pos">${i + 1}</span>
+        <span class="cname">${name(x.code)}<small class="num">${money(x.code, x.r.net)} net</small></span>
+        <span class="bar"><i style="width:${(x.share / max * 100).toFixed(2)}%;background:${color(x.code)}"></i></span>
+        <span class="pct">${pct(x.share)}</span>
+      </li>`).join("");
+    document.getElementById("rankSub").textContent =
+      `At ${mult.toFixed(1)}× minimum wage. Higher means less of the employer's spend goes to taxes and contributions.`;
+
+    // table
+    document.getElementById("tbody").innerHTML = rows.map(x => {
+      const r = x.r, socEmp = r.employerContrib + r.employeeContrib;
+      const w = v => Math.max(0, v / r.cost * 100).toFixed(2) + "%";
+      return `<tr>
+        <td><span class="dot" style="background:${color(x.code)}"></span>${name(x.code)}</td>
+        <td class="num">${money(x.code, r.gross)}</td>
+        <td class="num">${money(x.code, r.employerContrib)}<small>${pct(r.employerContrib / r.gross)} of gross</small></td>
+        <td class="num">${money(x.code, r.cost)}</td>
+        <td class="num">${money(x.code, r.employeeContrib)}</td>
+        <td class="num">${money(x.code, r.tax)}</td>
+        <td class="num"><strong>${money(x.code, r.net)}</strong></td>
+        <td class="num"><strong>${pct(x.share)}</strong>
+          <div class="split" aria-hidden="true"><span class="n" style="width:${w(r.net)}"></span><span class="t" style="width:${w(r.tax)}"></span><span class="e" style="width:${w(socEmp)}"></span></div></td>
+      </tr>`;
+    }).join("");
+
+    drawChart();
+  }
+
+  let curves = null;
+  function buildCurves() {
+    curves = {};
+    for (const code of ORDER) {
+      const pts = [];
+      for (let m = 1; m <= 10.0001; m += 0.1) {
+        const r = monthly(code, m);
+        pts.push([m, r.net / r.cost]);
+      }
+      curves[code] = pts;
+    }
+  }
+  function drawChart() {
+    const W = 620, H = 340, L = 44, R = 14, T = 12, B = 30;
+    const all = ORDER.flatMap(c => curves[c].map(p => p[1]));
+    let ymin = Math.floor(Math.min(...all) * 20) / 20, ymax = Math.ceil(Math.max(...all) * 20) / 20;
+    if (ymax - ymin < 0.1) ymax = ymin + 0.1;
+    const X = m => L + (m - 1) / 9 * (W - L - R);
+    const Y = v => T + (ymax - v) / (ymax - ymin) * (H - T - B);
+    let s = "";
+    for (let v = ymin; v <= ymax + 1e-9; v += 0.05) {
+      s += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/>`;
+      s += `<text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${Math.round(v * 100)}%</text>`;
+    }
+    for (const m of [1, 2, 4, 6, 8, 10]) s += `<text x="${X(m)}" y="${H - 10}" text-anchor="middle">${m}×</text>`;
+    s += `<line x1="${X(mult)}" x2="${X(mult)}" y1="${T}" y2="${H - B}" stroke="var(--fg)" stroke-width="1" stroke-dasharray="3 3" opacity=".6"/>`;
+    const drawOrder = focus ? ORDER.filter(c => c !== focus).concat([focus]) : ORDER;
+    for (const code of drawOrder) {
+      const op = focus && focus !== code ? 0.15 : 1, sw = focus === code ? 3 : 1.75;
+      const d = curves[code].map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join("");
+      s += `<path d="${d}" fill="none" stroke="${color(code)}" stroke-width="${sw}" stroke-linejoin="round" opacity="${op}"><title>${name(code)}</title></path>`;
+      const r = monthly(code, mult), v = r.net / r.cost;
+      s += `<circle cx="${X(mult)}" cy="${Y(v)}" r="3.5" fill="${color(code)}" stroke="var(--surface)" stroke-width="1.5" opacity="${op}"/>`;
+      if (focus === code) s += `<text x="${Math.min(X(mult) + 8, W - 60)}" y="${Y(v) - 8}" style="fill:var(--fg);font-weight:500">${name(code)} ${pct(v)}</text>`;
+    }
+    document.getElementById("chart").innerHTML = s;
+    document.getElementById("legend").innerHTML = ORDER.map(code =>
+      `<button type="button" data-code="${code}" aria-pressed="${focus === code}" class="${focus && focus !== code ? "dim" : ""}"><b style="background:${color(code)}"></b>${name(code)}</button>`).join("");
+  }
+
+  function renderAssumptions() {
+    document.getElementById("atbody").innerHTML = ORDER.map(code => `
+      <tr>
+        <td><span class="dot" style="background:${color(code)}"></span>${name(code)}</td>
+        <td><input id="min-${code}" type="number" step="any" min="0" value="${META[code].min.toFixed(2)}" aria-label="${name(code)} annual minimum wage"> <span class="num">${CUR[code]}</span></td>
+        <td><input id="fx-${code}" type="number" step="any" min="0" value="${META[code].fx}" ${CUR[code] === "EUR" ? "disabled" : ""} aria-label="${name(code)} exchange rate"></td>
+        <td class="note">${META[code].basis}</td>
+      </tr>`).join("");
+    for (const code of ORDER) {
+      document.getElementById("min-" + code).addEventListener("change", e => {
+        const v = parseFloat(e.target.value); if (v > 0) { META[code].min = v; buildCurves(); render(); }
+      });
+      document.getElementById("fx-" + code).addEventListener("change", e => {
+        const v = parseFloat(e.target.value); if (v > 0) { META[code].fx = v; render(); }
+      });
+    }
+  }
+
+  function setCurrency(eur) {
+    useEur = eur;
+    document.getElementById("curEur").setAttribute("aria-pressed", String(eur));
+    document.getElementById("curLocal").setAttribute("aria-pressed", String(!eur));
+    render();
+  }
+
+  function toggleFocus(e) {
+    const el = e.target.closest("[data-code]");
+    if (!el) return;
+    if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return;
+    if (e.type === "keydown") e.preventDefault();
+    focus = focus === el.dataset.code ? null : el.dataset.code;
+    render();
+  }
+  for (const id of ["rank", "legend"]) {
+    document.getElementById(id).addEventListener("click", toggleFocus);
+    document.getElementById(id).addEventListener("keydown", toggleFocus);
+  }
+  document.getElementById("mult").addEventListener("input", e => { mult = parseFloat(e.target.value); render(); });
+  document.getElementById("curEur").addEventListener("click", () => setCurrency(true));
+  document.getElementById("curLocal").addEventListener("click", () => setCurrency(false));
+
+  fetch("salary_rules_2026.json")
+    .then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(data => {
+      rules = data;
+      const fx = (data.fx_eur_reference && data.fx_eur_reference.rates) || {};
+      ORDER = Object.keys(data.countries);
+      for (const code of ORDER) {
+        const c = data.countries[code], k = c.constants || {};
+        CUR[code] = c.currency;
+        META[code] = { min: k.minimum_wage_annual || 0, basis: k.minimum_wage_basis || "", fx: c.currency === "EUR" ? 1 : (fx[c.currency] || 1) };
+      }
+      ORDER = ORDER.filter(code => META[code].min > 0);
+      mult = parseFloat(document.getElementById("mult").value) || 2; renderAssumptions(); buildCurves(); render(); })
+    .catch(err => {
+      document.getElementById("rank").innerHTML = `<li class="error">Could not load salary_rules_2026.json (${err.message}). Reload the page to try again.</li>`;
+    });
+})();
+</script>
+
+</body></html>
